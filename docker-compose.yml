@@ -1,0 +1,115 @@
+version: "3"
+
+services:
+
+  zookeeper:
+    image: zookeeper
+    restart: always
+    container_name: zookeeper
+    hostname: zookeeper
+    ports:
+      - 2181:2181
+    networks:
+      - default
+    environment:
+      ZOO_MY_ID: 1
+
+  broker:
+    container_name: broker
+    image: wurstmeister/kafka
+    restart: always
+    ports:
+      - 9092:9092
+    networks:
+      - default
+    environment:
+      KAFKA_ADVERTISED_HOST_NAME: 10.10.3.124
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_MESSAGE_MAX_BYTES: 2000000
+      KAFKA_CREATE_TOPICS: "${EVENT_TOPIC}:1:1"
+
+  kafka_manager:
+    image: hlebalbau/kafka-manager:stable
+    container_name: kakfa-manager
+    restart: always
+    ports:
+      - 9000:9000
+    networks:
+      - default
+    environment:
+      ZK_HOSTS: "zookeeper:2181"
+      APPLICATION_SECRET: "random-secret"
+      KAFKA_MANAGER_AUTH_ENABLED: "true"
+      KAFKA_MANAGER_USERNAME: admin
+      KAFKA_MANAGER_PASSWORD: abc123@A
+    command: -Dpidfile.path=/dev/null
+
+  connect:
+    build:
+      context: kafka-connect
+      dockerfile: Dockerfile
+    hostname: kafka-connect
+    container_name: kafka-connect
+    restart: always
+    depends_on:
+      - zookeeper
+      - broker
+    ports:
+      - 8083:8083
+    networks:
+      - default
+    environment:
+      CONNECT_BOOTSTRAP_SERVERS: 'broker:9092'
+      CONNECT_REST_ADVERTISED_HOST_NAME: kafka-connect
+      CONNECT_REST_PORT: 8083
+      CONNECT_GROUP_ID: kafka-connect-group
+      CONNECT_CONFIG_STORAGE_TOPIC: docker-connect-configs
+      CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR: 1
+      CONNECT_OFFSET_FLUSH_INTERVAL_MS: 10000
+      CONNECT_OFFSET_STORAGE_TOPIC: docker-connect-offsets
+      CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR: 1
+      CONNECT_STATUS_STORAGE_TOPIC: docker-connect-status
+      CONNECT_STATUS_STORAGE_REPLICATION_FACTOR: 1
+      CONNECT_KEY_CONVERTER: org.apache.kafka.connect.storage.StringConverter
+      CONNECT_VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      CONNECT_VALUE_CONVERTER_SCHEMAS_ENABLE: "false"
+      CONNECT_INTERNAL_KEY_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      CONNECT_INTERNAL_VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      CONNECT_ZOOKEEPER_CONNECT: 'zookeeper:2181'
+
+  redis:
+    image: redis:6.0.3-alpine
+    container_name: son_redis
+    hostname: redis
+    networks:
+      - default
+    ports:
+      - 6379:6379
+    restart: always
+    volumes:
+      - ./redis/redis.conf:/usr/local/etc/redis/redis.conf
+      - ./redis/redis_data:/data
+    command: [ "redis-server", "/usr/local/etc/redis/redis.conf" ]
+
+  mongodb:
+    image: mongo:4.0.8
+    container_name: mongodb
+    restart: unless-stopped
+    command: mongod --auth
+    networks:
+      - default
+    ports:
+    - 27017:27017
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: 123456
+      MONGO_INITDB_DATABASE: vnevents
+      MONGODB_DATA_DIR: /data/db
+      MONDODB_LOG_DIR: /dev/null
+    volumes:
+      - ./mongodb/mongodbdata:/data/db
+
+networks:
+  default:
+    external:
+      name: vnevent-network
