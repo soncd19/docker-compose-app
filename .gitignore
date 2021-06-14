@@ -1,0 +1,10 @@
+.idea
+out
+*.class
+*.iml
+logs
+target
+mongodb/mongodbdata
+redis/redis_data
+vnevent-stream/logs
+*.zip
